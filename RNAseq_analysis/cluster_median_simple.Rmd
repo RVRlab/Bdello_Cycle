@@ -1,0 +1,160 @@
+---
+title: "cluster_median_simple"
+output: html_notebook
+---
+
+
+
+```{r}
+library(tidyverse)
+cms <- cluster_median_simple |> left_join(annotation) |> dplyr::rename(locus_tag = X)
+GO <- read.delim(file.choose())
+cms <- cms |> left_join(GO) |> group_by(time, clusterID, class, ONTOLOGY) |> filter(!is.na(class)) |> mutate(n_GO = n(), description = as.factor(description), description = fct_reorder(description, n_GO))
+
+ggplot(cms |> filter(time=="T50.T360", n_GO>5, clusterID==11, !is.na(class), ONTOLOGY!="CC"), aes(y=fct_reorder(description,n_GO), x=n_GO))  +geom_point(size=2, color="#0fa14a") +  facet_wrap(.~clusterID, scales="free") + theme_classic() + theme(panel.grid.major.y =element_line(), strip.background=element_blank(), strip.text=element_blank()) + xlim(0,64) -> GOs_11
+ggsave(GOs_11, width=5, height=3, filename="GOs_11.pdf")
+
+ggplot(cms |> filter(time=="T50.T360", n_GO>6, clusterID==10, !is.na(class), ONTOLOGY!="CC"), aes(y=fct_reorder(description,n_GO), x=n_GO))  +geom_point(size=2, color="#d45c49") +  facet_wrap(.~clusterID, scales="free") + theme_classic() + theme(panel.grid.major.y =element_line(), strip.background=element_blank(), strip.text=element_blank()) + xlim(0,64) -> GOs_10
+ggsave(GOs_10, width=5, height=3, filename="GOs_10.pdf")
+
+ggsave(GOs_10/GOs_11, filename="GOs_both.pdf", width=5, height=6.8)
+```
+
+```{r}
+library(AnnotationDbi)
+library(GO.db)
+goDB <- GO.db()
+go_terms <- GO$class
+go_info <- select(goDB, keys = go_terms, columns = c("GOID", "TERM", "ONTOLOGY"))
+
+GO <- GO |> left_join(go_info |> dplyr::rename(class=GOID, description=TERM))
+
+# Get the hierarchy for each GO term
+term_hierarchy <- lapply(go_terms, function(term) {
+  term_ancestors <- unlist(GOBPPARENTS[term])
+  return(term_ancestors)
+})
+```
+```{r}
+
+contrasts <- read.delim(file.choose())
+
+contrasts <- contrasts |> filter(!str_detect(GeneID, "Novel"), !str_detect(GeneID,"sRNA"))
+
+clusterID_tophits <- clusterID_tophits |> filter(!str_detect(X, "Novel"), !str_detect(X,"sRNA"))
+
+gene_0 <- clusterID_tophits |> filter(T0.T360>2) 
+gene_0 <- gene_0$X
+gene_20 <- clusterID_tophits |> filter(T20.T360>2) 
+gene_20 <- gene_20$X
+gene_50 <- clusterID_tophits |> filter(T50.T360>2) 
+gene_50 <- gene_50$X
+gene_90 <- clusterID_tophits |> filter(T90.T360>2) 
+gene_90 <- gene_90$X
+gene_120 <- clusterID_tophits |> filter(T120.T360>2) 
+gene_120 <- gene_120$X
+gene_260 <- clusterID_tophits |> filter(T260.T360>2) 
+gene_260 <- gene_260$X
+
+pos <- rbind(tibble(gene_ID=gene_0, time="T0"), tibble(gene_ID=gene_20, time="T20"), tibble(gene_ID=gene_50, time="T50"), tibble(gene_ID=gene_90, time="T90"), tibble(gene_ID=gene_120, time="T120"), tibble(gene_ID=gene_260, time="T260"))
+
+ pos |> group_by(gene_ID) |> summarize(times = list(time)) |> ggplot(aes(x=times)) + geom_bar(fill="black", width=0.5) + scale_x_upset(order_by="freq", sets=c("T0", "T20", "T50", "T90", "T120", "T260"), n_intersections=20) + theme_minimal() -> pos_upset
+ 
+ggsave(pos_upset, filename="pos_upset.pdf", width=8, height=5)
+
+ggplot(pos, aes(x=time)) + geom_bar()
+
+gene_0m <- clusterID_tophits |> filter(T0.T360<(-2)) 
+gene_0m<- gene_0m$X
+gene_20m <- clusterID_tophits |> filter(T20.T360< -2) 
+gene_20m <- gene_20m$X
+gene_50m <- clusterID_tophits |> filter(T50.T360< -2) 
+gene_50m <- gene_50m$X
+gene_90m <- clusterID_tophits |> filter(T90.T360< -2) 
+gene_90m <- gene_90m$X
+gene_120m <- clusterID_tophits |> filter(T120.T360< -2) 
+gene_120m <- gene_120m$X
+gene_260m <- clusterID_tophits |> filter(T260.T360< -2) 
+gene_260m <- gene_260m$X
+
+neg <- rbind(tibble(gene_ID=gene_0m, time="T0"), tibble(gene_ID=gene_20m, time="T20"), tibble(gene_ID=gene_50m, time="T50"), tibble(gene_ID=gene_90m, time="T90"), tibble(gene_ID=gene_120m, time="T120"), tibble(gene_ID=gene_260m, time="T260")) 
+
+ neg |> group_by(gene_ID) |> summarize(times = list(time)) |> ggplot(aes(x=times)) + geom_bar(fill="black", width=0.5) + scale_x_upset(order_by="freq", sets=c("T0", "T20", "T50", "T90", "T120", "T260"), n_intersections =20) + theme_minimal() -> neg_upset
+
+ggsave(neg_upset, filename="neg_upset.pdf", width=8, height=5)
+
+
+ gene_list_pos = list(T0 = gene_0, T20 = gene_20, T50 = gene_50, T90 = gene_90, T120 = gene_120, T260=gene_260)
+
+gene_list_neg = list(T0 = gene_0m, T20 = gene_20m, T50 = gene_50m, T90 = gene_90m, T120 = gene_120m, T260=gene_260m)
+
+ggVennDiagram(gene_list_pos, force_upset=TRUE)
+```
+
+```{r}
+
+
+gene_0 <- cluster_excel |> filter(T0>10) 
+gene_0 <- gene_0$Bd
+gene_20 <- cluster_excel |> filter(T20>10) 
+gene_20 <- gene_20$Bd
+gene_50 <- cluster_excel |> filter(T50>10) 
+gene_50 <- gene_50$Bd
+gene_90 <- cluster_excel |> filter(T90>10) 
+gene_90 <- gene_90$Bd
+gene_120 <- cluster_excel |> filter(T120>10) 
+gene_120 <- gene_120$Bd
+gene_260 <- cluster_excel |> filter(T260>10) 
+gene_260 <- gene_260$Bd
+gene_360 <- cluster_excel |> filter(T360>10) 
+gene_360 <- gene_360$Bd
+
+pos <- rbind(tibble(gene_ID=gene_0, time="T0"), tibble(gene_ID=gene_20, time="T20"), tibble(gene_ID=gene_50, time="T50"), tibble(gene_ID=gene_90, time="T90"), tibble(gene_ID=gene_120, time="T120"), tibble(gene_ID=gene_260, time="T260"), tibble(gene_ID=gene_360, time="T360"))
+
+ pos |> group_by(gene_ID) |> summarize(times = list(time)) |> ggplot(aes(x=times)) + geom_bar(fill="black", width=0.5) + scale_x_upset(order_by="freq", sets=c("T0", "T20", "T50", "T90", "T120", "T260", "T360"), n_intersections=20) + theme_minimal() -> pos_upset
+ 
+ggsave(pos_upset, filename="pos_upset2.pdf", width=8, height=4)
+
+#ggplot(pos, aes(x=time)) + geom_bar()
+
+
+```
+
+
+```{r}
+
+#pick the genes that are upregulated and only part of group T260
+
+pos_T260 <- pos |> group_by(gene_ID) |> summarize(times = list(time)) |> filter(times=="T260") |> rename(Bd = gene_ID) |> left_join(annotation) |> left_join(GO |> rename(gene_id = locus_tag)) |> group_by(description) |> mutate(n_GO = n()) |> left_join(cluster_excel |> select(Bd, "T260"))
+
+top <- pos_T260 |> ungroup() |> select(Bd, Name, "T260", gene_id) |> distinct() |> rename(MeanSignal = "T260") |> arrange(desc(MeanSignal))
+
+top <- top |> left_join(cluster_excel |> select(gene_id, gene_description)) |> mutate(gene_description = str_split_i(gene_description, pattern=" &&", 1))
+
+pos_T20 <- pos |> group_by(gene_ID) |> summarize(times = list(time)) |> filter(times=="T20") |> rename(Bd = gene_ID) |> left_join(annotation) |> left_join(GO |> rename(gene_id = locus_tag)) |> group_by(description) |> mutate(n_GO = n()) |> left_join(cluster_excel |> select(Bd, "T20"))
+
+top2 <- pos_T20 |> ungroup() |> select(Bd, Name, "T20", gene_id) |> distinct() |> rename(MeanSignal = "T20") |> arrange(desc(MeanSignal))
+
+top2 <- top2 |> left_join(cluster_excel |> select(gene_id, gene_description)) |> mutate(gene_description = str_split_i(gene_description, pattern=" &&", 1))
+
+  
+```
+
+```{r}
+
+#pick the genes that are upregulated and only part of group T260
+
+pos_T260 <- pos |> group_by(gene_ID) |> summarize(times = list(time)) |> filter(times=="T260") |> rename(gene_id = gene_ID) |> left_join(annotation) |> left_join(GO |> rename(gene_id = locus_tag)) |> group_by(description) |> mutate(n_GO = n()) |> left_join(clusterID_tophits |> rename(gene_id=X) |> select(gene_id, "T260.T360"))
+
+top <- pos_T260 |> ungroup() |> select(Bd, Name, "T260.T360", gene_id) |> distinct() |> rename(fold = "T260.T360") |> arrange(desc(fold))
+
+top <- top |> left_join(cluster_excel |> select(gene_id, gene_description)) |> mutate(gene_description = str_split_i(gene_description, pattern=" &&", 1))
+
+pos_T20 <- pos |> group_by(gene_ID) |> summarize(times = list(time)) |> filter(times=="T20") |> rename(gene_id = gene_ID) |> left_join(annotation) |> left_join(GO |> rename(gene_id = locus_tag)) |> group_by(description) |> mutate(n_GO = n()) |> left_join(clusterID_tophits |> rename(gene_id=X) |> select(gene_id, "T20.T360"))
+
+top2 <- pos_T20 |> ungroup() |> select(Bd, Name, "T20.T360", gene_id) |> distinct() |> rename(fold = "T20.T360") |> arrange(desc(fold))
+
+top2 <- top2 |> left_join(cluster_excel |> select(gene_id, gene_description)) |> mutate(gene_description = str_split_i(gene_description, pattern=" &&", 1))
+
+  
+```

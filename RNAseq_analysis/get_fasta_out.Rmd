@@ -1,0 +1,56 @@
+---
+title: "get fasta"
+output: html_notebook
+---
+
+packages needed: ape & tidyverse
+
+```{r}
+cluster_median_simple_excel <- read.csv2(file.choose(), sep=",") #de cluster csv file
+
+FASTA <- ape::read.FASTA(file.choose()) #fasta file met alle bdello genen
+
+#om bvb cluster 6 gen namen te selecteren
+cluster6 <- cluster_median_simple_excel[cluster_median_simple_excel$number_figure==6,]$gene_id
+
+#en dan de fasta's te krijgen waarmee de namen van FASTA overeenkomen met de lijst van cluster6
+FASTA6 <- FASTA[names(FASTA)%in%cluster6]
+
+#en dan opslaan als fasta
+ape::write.FASTA(FASTA6, file="genes_cluster6.fa")
+
+#voor alle genen:
+lapply(cluster_median_simple_excel$number_figure |> unique(), #lapply betekent: apply function on this list. in this case, the list is de lijst van unieke cluster nummers (1 t/m 11) in de clusterfile
+       function(x) #elk element van de lijst (1 t/m 11) wordt omdebeurt toegepast in de functie hier beneden. waar je 'x' leest in de functie, zet R het nummer uit de lijst neer.
+  FASTA[names(FASTA)%in%cluster_median_simple_excel[cluster_median_simple_excel$number_figure==x,]$gene_id] |> # dit is ouderwets subsetten in R (kan tegenwoordig ook een stuk leesbaarder maar soms vind ik dit toch handiger): van de file FASTA (met alle genen) pakken we alleen de onderdelen waarvan de gen namen (names(FASTA)) voorkomen in de lijst van cluster_median_simple_excel met cluster x.
+    ape::write.FASTA(file=paste("genes_cluster", x, ".fa",sep=""))) #opslaan
+
+#check hoeveel genen er in elke fasta file zitten
+lapply(cluster_median_simple_excel$number_figure |> unique(), function(x)
+  FASTA[names(FASTA)%in%cluster_median_simple_excel[cluster_median_simple_excel$number_figure==x,]$gene_id] |>
+    length()) #length geeft aan hoeveel onderdelen elke fasta heeft.
+
+#subset hypotheticals using "str_detect"
+clusters_hypo <- cluster_median_simple_excel |> filter(str_detect(gene_description, "hypothetical"))
+
+#same as above but now on the cluster_hypo dataset
+lapply(clusters_hypo$number_figure |> unique(), function(x) 
+  FASTA[names(FASTA)%in%clusters_hypo[clusters_hypo$number_figure==x,]$gene_id] |>
+    ape::write.FASTA(file=paste("genes_cluster_hypo", x, ".fa",sep=""))) #opslaan
+
+```
+
+```{r}
+
+#om bvb cluster 6 gen namen te selecteren
+allgenes_hypo <- cluster_median_simple_excel[cluster_median_simple_excel$gene_description=="hypothetical protein && -",]$gene_id
+
+#en dan de fasta's te krijgen waarmee de namen van FASTA overeenkomen met de lijst van cluster6
+hypos <- FASTA[names(FASTA)%in%allgenes_hypo]
+
+#en dan opslaan als fasta
+ape::write.FASTA(hypos, file="genes_hypothetical.fa")
+
+
+```
+

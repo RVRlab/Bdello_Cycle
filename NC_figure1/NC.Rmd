@@ -1,0 +1,116 @@
+---
+title: "NC-HUalpha"
+output: html_notebook
+---
+
+```{r, setup, include=FALSE}
+knitr::opts_knit$set(root.dir = 'C:/Users/adminuser/OneDrive - UCL/Microscopy Files/231207_timecourse_figure1/TIFs/HUaGFP/microbeJ')
+```
+
+```{r}
+library(bactMAP)
+library(tidyverse)
+```
+```{r}
+addPixels2um("snape", 0.0659409)
+T0 <- extr_MicrobeJ("T0_cells_contours.csv", objectloc = "T0_DAPI_contours.csv", mag="snape")
+T20 <- extr_MicrobeJ("T20_cells_contours.csv", objectloc = "T20_DAPI_contours.csv", mag="snape")
+T50 <- extr_MicrobeJ("T50_cells_contours.csv", objectloc = "T50_DAPI_contours.csv")
+T90 <- extr_MicrobeJ("T90_cells_contours.csv", objectloc = "T90_DAPI_contours.csv")
+T120 <- extr_MicrobeJ("T120_cells_contours.csv", objectloc = "T120_DAPI_contours.csv")
+T260 <- extr_MicrobeJ("T260_cells_contours.csv", objectloc = "T260_DAPI_contours.csv")
+T360 <- extr_MicrobeJ("T360_cells_contours.csv", objectloc = "T360_DAPI_contours.csv", mag="snape")
+```
+```{r}
+T0G <- extr_MicrobeJ("T0_cells_contours.csv", objectloc = "T0_GFP_contours.csv", mag="snape")
+T20G <- extr_MicrobeJ("T20_cells_contours.csv", objectloc = "T20_GFP_contours.csv", mag="snape")
+T50G <- extr_MicrobeJ("T50_cells_contours.csv", objectloc = "T50_GFP_contours.csv")
+T90G <- extr_MicrobeJ("T90_cells_contours.csv", objectloc = "T90_GFP_contours.csv")
+T120G <- extr_MicrobeJ("T120_cells_contours.csv", objectloc = "T120_GFP_contours.csv")
+T260G <- extr_MicrobeJ("T260_cells_contours.csv", objectloc = "T260_GFP_contours.csv")
+T360G <- extr_MicrobeJ("T360_cells_contours.csv", objectloc = "T360_GFP_contours.csv", mag="snape")
+
+
+
+```
+
+
+
+```{r}
+
+objects <- combineDataframes(list(
+  T0G$object_relative, T20G$object_relative, T50G$object_relative, T90G$object_relative, T120G$object_relative, T260G$object_relative, T360G$object_relative,
+  T0$object_relative, T20$object_relative, T50$object_relative, T90$object_relative, T120$object_relative, T260$object_relative, T360$object_relative), listofconditions = list("T0", "T20", "T50", "T90", "T120", "T260", "T360", 
+    "T0", "T20", "T50", "T90", "T120", "T260", "T360"), listofchannels = list("GFP","GFP","GFP","GFP","GFP","GFP","GFP", 
+      "DAPI","DAPI","DAPI","DAPI","DAPI", "DAPI", "DAPI"))$finalframe
+
+meshes <- combineDataframes(list(T0G$mesh, T20G$mesh, T50G$mesh, T90G$mesh, T120G$mesh, T260G$mesh, T360G$mesh, 
+  T0$mesh, T20$mesh, T50$mesh, T90$mesh, T120$mesh, T260$mesh, T360$mesh), listofconditions = list("T0", "T20", "T50", "T90", "T120", "T260", "T360", 
+    "T0", "T20", "T50", "T90", "T120", "T260", "T360"), listofchannels = list("GFP","GFP","GFP","GFP","GFP","GFP","GFP", 
+      "DAPI", "DAPI", "DAPI","DAPI","DAPI","DAPI","DAPI"))$finalframe
+
+objects <- objects |> left_join(meshes |> select(cell, frame, max_um, channel, condition, area) |> distinct()) 
+object_sumnew <- objects |> group_by(condition, channel) |> select(-ob_out_x, -ob_out_y, -ob_x, -ob_y, -obpath) |> distinct() |> group_by(cell, frame, channel, condition, area, max_um, maxwum) |> summarize(obarea = sum(obarea), obnum = max(obnum), obwidth = mean(obwidth), oblength=mean(oblength)) |> mutate(NC = obarea/area) 
+
+object_sumnew <- object_sumnew |> ungroup() |> mutate(condition = fct_relevel(condition, "T0","T20", "T50", "T90", "T120", "T260", "T360")) |>
+  mutate(obarea=ifelse(condition=="T0", obarea * 0.0659409*0.0659409, obarea),
+         area = ifelse(condition=="T0", area * 0.0659409*0.0659409, area),
+         obarea=ifelse(condition=="T360", obarea * 0.0659409*0.0659409, obarea),
+         area = ifelse(condition=="T360", area * 0.0659409*0.0659409, area),
+         obarea = ifelse(condition=="T20", ifelse(channel=="GFP",obarea * 0.0659409*0.0659409, obarea), obarea),
+         area = ifelse(condition=="T20", ifelse(channel=="GFP",area * 0.0659409*0.0659409, area), area),
+         max_um = ifelse(condition=="T20", ifelse(channel=="DAPI",max_um * 0.0659409, max_um), max_um)) |>
+  filter(max_um > 0.3)
+
+
+ggplot(object_sumnew, aes(x=area,y=obarea)) + geom_point() + scale_x_log10() + scale_y_log10() + facet_wrap(condition~channel)
+ggplot(object_sumnew, aes(x=condition, y=obarea) ) + ggforce::geom_sina() + facet_wrap(.~channel)
+ggplot(object_sumnew |> filter(area>0.4), aes(x=condition, y=area) ) + ggforce::geom_sina() + facet_wrap(.~channel)
+
+ggplot(object_sumnew |> filter(area>0.4, obarea<area, obarea>0.1) |> group_by(condition) |> sample_n(290) |> ungroup(), aes(x=condition, y=NC)) + ggforce::geom_sina(size=0.2, alpha=0.5, maxwidth=0.6) + geom_boxplot(width=0.2, outlier.color=NA) +facet_wrap(.~channel) + ylim(0,1.1) + theme_minimal() + scale_y_continuous(breaks=c(0,0.5,1)) -> NCplot
+
+ggsave(NCplot, file = "NCplot.pdf", width=18, height=2)
+
+save(object_sumnew, file="objects_sum_new.Rda")
+```
+
+```{r}
+#tdt
+T0Tiff <- extr_OriginalStack(file.choose())
+T20Tiff <- extr_OriginalStack(file.choose())
+T50Tiff <- extr_OriginalStack(file.choose())
+T90Tiff <- extr_OriginalStack(file.choose())
+T120Tiff <- extr_OriginalStack(file.choose())
+T260Tiff <- extr_OriginalStack(file.choose())
+T360Tiff <- extr_OriginalStack(file.choose())
+
+#extr_Originalcells gives an error with cell turning for some frames. today I have enough cells so for today I just remove the frames with the error..
+
+T0cells <- extr_OriginalCells(T0Tiff, T0$mesh |> filter(frame<5))
+T20cells <- extr_OriginalCells(T20Tiff, T20$mesh |> filter(frame!=3))
+T50cells <- extr_OriginalCells(T50Tiff, T50$mesh |> mutate(X = X/0.0659409, Y=Y/0.0659409) |> filter(frame!=3, frame!=7, frame!=8, frame!=9))
+T90cells <- extr_OriginalCells(T90Tiff, T90$mesh |> mutate(X = X/0.0659409, Y=Y/0.0659409) |> filter(frame!=2, frame!=5))
+T120cells <- extr_OriginalCells(T120Tiff, T120$mesh |> mutate(X = X/0.0659409, Y=Y/0.0659409))
+T260cells <- extr_OriginalCells(T260Tiff, T260$mesh |> mutate(X = X/0.0659409, Y=Y/0.0659409))
+T360cells <- extr_OriginalCells(T360Tiff, T360$mesh |> filter(frame<5))
+
+all_cells <- combineDataframes(list(T0cells$rawdata_turned, T20cells$rawdata_turned, T50cells$rawdata_turned, T90cells$rawdata_turned,
+                                    T120cells$rawdata_turned, T260cells$rawdata_turned, T360cells$rawdata_turned),
+                               listofconditions = list("T0", "T20", "T50", "T90", "T120", "T260", "T360"))
+all_cells <- all_cells$finalframe
+
+all_cells_lengthbin_LW <- all_cells |> group_by(cell, frame, condition) |> mutate(lengthbin = percent_rank(X_rot), lengthbin=round(lengthbin*4, digits=1)/4, values = percent_rank(values), widthbin=percent_rank(Y_rot), widthbin=round(widthbin*2, digits=1)/2) |> ungroup() |> group_by(condition, lengthbin, widthbin) |> summarise(medianval = median(values), sdval=sd(values))
+
+all_cells_realpix_LW <- all_cells |> group_by(cell, frame, condition) |> mutate(X_rot=round(X_rot/3, digits=1)*3, values = percent_rank(values), Y_rot=round(Y_rot/3, digits=1)*3) |> ungroup() |> group_by(condition, X_rot, Y_rot) |> summarise(medianval = median(values), sdval=sd(values))
+
+
+all_meshes <- combineDataframes(list(T0cells$mesh, T20cells$mesh, T50cells$mesh, T90cells$mesh, T120cells$mesh, T260cells$mesh, T360cells$mesh), listofconditions = list("T0", "T20", "T50", "T90", "T120", "T260", "T360"))$finalframe
+
+ggplot() + 
+  geom_raster(data= all_cells_realpix_LW, aes(x=X_rot, y=Y_rot,fill=medianval)) +
+  facet_wrap(.~condition) + 
+  scale_fill_viridis_c() + 
+  geom_path(data=all_meshes, aes(x=X_rot, y=Y_rot, group=paste(cell,frame)), color="white", alpha=0.01)
+```
+
+

@@ -1,0 +1,220 @@
+---
+title: "clusters_differential"
+output: html_notebook
+---
+
+
+```{r}
+library(tidyverse)
+ 
+clusterfile <- read.delim(file.choose()) #using MedianFold file
+
+clusterfile <- clusterfile |> gather(key=time, value=MedianFold, 2:7) |> filter(str_detect(X,"Novel")==FALSE)
+clusterfile <- clusterfile |> arrange(clusterID) |> group_by(time) |>  mutate(N = row_number())
+clusterfile <- clusterfile |> mutate(time = as.factor(time))
+clusterfile <- clusterfile |> mutate(time = fct_relevel(time, "T0.T360", "T20.T360", "T50.T360", "T90.T360"))
+
+ggplot(clusterfile, aes(x=time, y=N,fill=MedianFold)) + geom_raster() + scale_fill_distiller(palette="RdBu") + geom_point(aes(x=0, y=N, color=as.factor(clusterID))) + theme_minimal() -> medianfoldplot
+
+cluster_median_simple <- clusterfile |> mutate(clusterID = ifelse(clusterID==2, 1, clusterID), clusterID = ifelse(clusterID==6, 4, clusterID), clusterID=ifelse(clusterID==13, 10, clusterID), clusterID=ifelse(clusterID==8, 5, clusterID))
+
+cluster_median_simple <- cluster_median_simple |> mutate(clusterID = as.factor(clusterID), clusterID=fct_relevel(clusterID, "7", "10", "1", "5", "4", "3", "12", "11", "14", "15", "9")) |> arrange(clusterID) |> group_by(time) |> mutate(N=row_number())
+
+ggplot(cluster_median_simple, aes(x=time, y=-N,fill=MedianFold)) + geom_raster() + scale_fill_continuous_divergingx(palette="RdBu", mid=0) + geom_point(aes(x=0, color=clusterID)) + theme_minimal() -> medianfoldplot_simple
+
+ggsave(medianfoldplot_simple, filename="medianfoldplot_simple.jpg", width=8, height=6)
+
+ggplot(cluster_median_simple,aes(x=time, y=MedianFold, group=gene_id)) + geom_hline(yintercept=0, color = "#e94646", linewidth=1) + geom_path(alpha=0.05) + facet_grid(clusterID~.) + theme_minimal() + theme(panel.background = element_rect(color="black"), strip.text=element_blank(), strip.background = element_blank()) -> cluster_median_n
+
+ggsave(cluster_median_n, width=3, height=28, file="cluster_median_n.pdf")
+```
+
+```{r}
+
+cluster_high <- read.delim(file.choose()) #using HighFold file
+
+cluster_high <- cluster_high |> gather(key=time, value=HighFold, 2:7) |> filter(str_detect(X, "Novel")==FALSE)
+cluster_high <- cluster_high |> arrange(clusterID) |> group_by(time) |>  mutate(N = row_number())
+cluster_high <- cluster_high |> mutate(time = as.factor(time))
+cluster_high <- cluster_high |> mutate(time = fct_relevel(time, "T0.T360", "T20.T360", "T50.T360", "T90.T360"))
+
+ggplot(cluster_high, aes(x=time, y=N,fill=HighFold)) + geom_raster() + scale_fill_viridis_c(option="mako") + geom_point(aes(x=0, y=N, color=as.factor(clusterID))) + theme_minimal() ->
+  highfoldplot
+
+#ggsave(highfoldplot, filename = "highfoldplot.pdf", width=8, height=6)
+```
+
+```{r}
+
+cluster_exp <- read.delim(file.choose()) #using MeanSignal file
+
+cluster_exp <- cluster_exp |> gather(key=time, value=MeanSignal, 2:8) |> filter(str_detect(X, "Novel")==FALSE)
+cluster_exp <- cluster_exp |> arrange(clusterID) |> group_by(time) |>  mutate(N = row_number())
+cluster_exp <- cluster_exp |> mutate(time = as.factor(time))
+cluster_exp <- cluster_exp |> mutate(time = fct_relevel(time, "T0","T20", "T50", "T90", "T120", "T260", "T360"))
+
+ggplot(cluster_exp, aes(x=time, y=N,fill=MeanSignal)) + geom_raster() + scale_fill_viridis_c(option="mako") + geom_point(aes(x=0, y=N, color=as.factor(clusterID))) + theme_minimal() -> meansignalplot
+
+ggsave(meansignalplot, filename="meansignalplot.pdf", width=8, height=6)
+```
+
+
+```{r}
+
+clusterID_heat <- read.delim(file.choose()) #file = trex2.Heatmap_Rank_Factors_1.clusters.txt
+counts <- read.delim(file.choose()) #file = Counts.txt
+
+clusterID_heat <- clusterID_heat  |> left_join(counts |> rename(GeneID = key)) |> filter(str_detect(GeneID, "Novel")==FALSE)
+clusterID_heat <- clusterID_heat |> gather(key=sample, value=count, 3:23) |>
+  separate(sample, sep="_", into=c("time", "replicate"))
+clusterID_sum <- clusterID_heat |> group_by(GeneID, time, clusters) |> summarize(MeanSignal = mean(count), MedianSignal = median(count)) 
+
+clusterID_sum <- clusterID_sum |> arrange(clusters, GeneID) |> group_by(time) |> mutate(N=row_number()) |> ungroup()
+clusterID_sum <- clusterID_sum |> mutate(time=as.factor(time), time=fct_relevel(time, "T0", "T20", "T50", "T90", "T120", "T260", "T360"))
+clusterID_sum <- clusterID_sum |> mutate(MeanSignal_log = log(MeanSignal), MedianSignal_log = log(MedianSignal))
+
+ggplot(clusterID_sum, aes(x=time, y=N,fill=MeanSignal_log)) + geom_raster() + scale_fill_viridis_c(option="mako") + geom_point(aes(x=0, y=N, color=as.factor(clusters))) + theme_minimal() -> MeanSignalPlot_cluster
+
+ggplot(clusterID_sum, aes(x=time, y=N,fill=MedianSignal_log)) + geom_raster() + scale_fill_viridis_c(option="mako") + geom_point(aes(x=0, y=N, color=as.factor(clusters))) + theme_minimal() -> MedianSignalPlot_cluster
+
+```
+
+
+
+```{r}
+
+rankMean <- read.delim(file.choose()) #trex2.rank_mean_table.txt
+
+rankTog <- rankMean |> rename(GeneID = X) |> 
+  filter(str_detect(GeneID, "Novel")==FALSE) |>
+  left_join(clusterID_heat |> 
+              select(GeneID, clusters) |> 
+              distinct()) |>
+  gather(key=time, value=rankMean, 2:8) |> 
+  mutate(clusters = as.factor(clusters), clusters=fct_relevel(clusters, "1", "4", "6", "5", "7", "8", "9", "3", "2")) |>
+  arrange(clusters) |> 
+  group_by(time) |> 
+  mutate(N=row_number(),
+         time= as.factor(time),
+         time=fct_relevel(time, "T0", "T20", "T50", "T90", "T120", "T260", "T360"),
+         time_num = as.character(time),
+         time_num = as.numeric(str_remove(time_num, "T")))
+
+ggplot(rankTog, aes(x=time, y=N,fill=rankMean)) + geom_raster() + scale_fill_viridis_c(option="mako") + geom_point(aes(x=0, y=N, color=as.factor(clusters))) + theme_minimal() -> RankMeanCluster
+
+ggsave(RankMeanCluster, filename="RankMeanCluster_TRex.pdf", width=10, heigh=6)
+```
+
+
+```{r}
+clusterID_tophits <- read.delim(file.choose())
+
+tophits <- read.delim(file.choose()) #trex2.TMEV_TOPHITS_logFC
+
+topTog <- tophits |> rename(GeneID=X) |>
+  filter(str_detect(GeneID, "Novel")==FALSE) |>
+  left_join(clusterID_tophits) |>
+  gather(key=time, value=TMEV, 2:7) |>
+  mutate(clusters = as.factor(clusters), clusters=fct_relevel(clusters, "3", "6", "7", "8", "2","9", "1", "5", "4")) |>
+  arrange(clusters) |> 
+  group_by(time) |>
+  mutate(N=row_number(),
+         time=as.factor(time),
+         time=fct_relevel(time,"T0.T360", "T20.T360", "T50.T360", "T90.T360", "T120.T360", "T260.T360"))
+
+
+ggplot(topTog, aes(x=time, y=N,fill=TMEV)) + geom_raster() + scale_fill_viridis_c(option="mako") + geom_point(aes(x=0, y=N, color=as.factor(clusters))) + theme_minimal() -> topTogcluster
+
+ggsave(topTogcluster, filename="TopTogCluster_TRex.pdf", width=10, heigh=6)
+```
+
+
+```{r}
+
+annotations <- read.delim(file.choose()) #0.Supfile->gene.xls
+cogs <- read.delim(file.choose())
+cogs <- cogs |> rename(gene_id = locus_tag)
+
+cluster_high <- cluster_high |> left_join(annotations |> mutate(X=gene_id))
+cluster_exp <- cluster_exp |> left_join(annotations |> mutate(X=gene_id))
+clusterfile <- clusterfile |> left_join(annotations |> mutate(X=gene_id))
+
+cluster_exp <- cluster_exp |> group_by(time) |> arrange(time, -MeanSignal) |> mutate(rank=row_number())
+ggplot(cluster_exp |> filter(rank<100), aes(x=gene_start, y=1)) +  geom_hline(yintercept=1) +geom_point(aes(color=rank), size=3) + coord_polar() + facet_grid(.~time) + theme_void() + scale_color_viridis_c(option="mako") + ylim(-1,1)
+
+```
+
+
+```{r}
+PBPs <- readxl::read_excel("PBPs.xlsx")
+
+PBPs_cluster_exp <- PBPs |> left_join(cluster_exp |> select(gene_id, MeanSignal, time)) 
+
+ggplot(PBPs_cluster_exp, aes(x=time, y=MeanSignal, group=gene_id)) + geom_path() + geom_path(linewidth=1, aes(color=Published))+ facet_grid(.~type) + theme_minimal() + theme(panel.grid.minor=element_blank()) + scale_color_brewer(palette="Set1") + geom_text(data=PBPs_cluster_exp |> filter(!is.na(Published), time=="T360"), aes(y=MeanSignal, color=Published, label=Bd_number))
+```
+
+
+```{r}
+TypeII <- readxl::read_excel("TypeII.xlsx")
+
+TypeII_cluster_exp <- TypeII |> left_join(cluster_exp|> select(gene_id, MeanSignal, time))
+
+```
+
+
+```{r}
+
+ggplot(cluster_exp, aes(x=time, y=MeanSignal, group=X)) + geom_line() + facet_wrap(.~clusterID) + geom_line(data=cluster_exp |> filter(X=="BD_RS01290"), color="yellow")
+
+with_Bd0279 = cluster_exp |> filter(clusterID==9) |> left_join(cogs) |> ungroup() |> select(-time, -rank,-MeanSignal) |> distinct()
+
+ggplot(cluster_exp, aes(x=time, y=MeanSignal, group=X)) + geom_line() + facet_wrap(.~clusterID) + geom_line(data=cluster_exp |> filter(X=="BD_RS08330"), color="yellow")
+
+with_Bd1827 = cluster_exp |> filter(clusterID==11) |> left_join(cogs) |> ungroup() |> select(-time, -rank,-MeanSignal) |> distinct()
+
+```
+
+
+add hic
+```{r}
+
+bin_by_size <- function(data, column, bin_size) {
+  range_min <- min(data[[column]])
+  range_max <- max(data[[column]])
+  num_bins <- ceiling((range_max - range_min) / bin_size)
+  
+  data %>%
+    mutate(new_bin = cut(.data[[column]], breaks = seq(range_min, range_max, by = bin_size)))
+}
+
+
+
+
+HiC_Diagonal1000kb <- read.table(file.choose())
+BW_T0 <- plotgardener::readBigwig(file.choose())
+BW_T0 <- BW_T0 |> 
+  mutate(start_middle = ifelse(start>max(start)/2, start-max(start)/2, start+max(start)/2),
+         end_middle = ifelse(end>max(end)/2, end-max(end)/2,end+max(end)/2),
+         mean_middle = (start_middle+end_middle)/2)
+
+BW_T0 <- bin_by_size(BW_T0, 'mean_middle', 1000) |> mutate(new_bin = as.double(new_bin)*1000) |> group_by(new_bin) |> summarize(score=mean(score)) |> rename(position=new_bin)
+tog <- left_join(BW_T0, HiC_Diagonal1000kb)
+
+Diag_T0 <- ggplot(HiC_Diagonal1000kb, aes(x=position,y=value)) + geom_path() + xlim(100000,200000)
+RNA_T0 <- ggplot(BW_T0, aes(x=new_bin, y=score)) + geom_path() + xlim(100000,200000) + ylim(0,1000)
+
+Diag_T0/RNA_T0
+
+```
+
+```{r}
+HiC_0 <- read.table(file.choose())
+BW_0 <- plotgardener::readBigwig(file.choose())
+BW_0 <- BW_0 |> 
+  mutate(start_middle = ifelse(start>max(start)/2, start-max(start)/2, start+max(start)/2),
+         end_middle = ifelse(end>max(end)/2, end-max(end)/2,end+max(end)/2),
+         mean_middle = (start_middle+end_middle)/2)
+
+BW_0 <- bin_by_size(BW_0, 'mean_middle', 2000) |> mutate(new_bin = as.double(new_bin)*1000) |> group_by(new_bin) |> summarize(score=mean(score)) |> rename(position=new_bin)
+tog <- left_join(BW_0, HiC_0)
+```

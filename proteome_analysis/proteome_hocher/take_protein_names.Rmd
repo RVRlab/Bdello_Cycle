@@ -1,0 +1,24 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+ 
+
+```{r}
+
+fastafile <-seqinr::read.fasta("sequence_fasta.txt")
+fasta_ann <- seqinr::getAnnot.list(fastafile) |> rbind() |> t() |> as.data.frame() |> mutate(IDnumber = row_number(), test = str_match_all(V1, "\\[([^=]+)=([^\\]]+)\\]")) |> unnest(cols=test) |> mutate(names = test[,2], vals = test[,3]) |> select(names, vals, IDnumber) |> spread(key=names, value=vals)
+
+prot <- read_delim("SourceData_F_2BG.txt") |> rename(protein_id = ID) |> full_join(fasta_ann)
+
+
+figS4 <- readxl::read_xlsx("Copy of SourceData_Fig_S4.xlsx", sheet=2)
+fkpm <- read_delim("gene_fpkm_group.xls") |> full_join(cluster_exp |> ungroup() |> select(Bd, gene_id) |> distinct())
+
+figS4 <- figS4 |> full_join(fkpm |> rename(locus_tag=Bd) |> select(locus_tag, gene_name, T0, T20, T50, T90, T120, T260, T360))  |> gather(key="time", value="fkpm", T0, T20, T50, T90, T120, T260, T360)
+
+ggplot(figS4 |> mutate(time=fct_relevel(time, "T0","T20", "T50", "T90","T120","T260")), aes(y=AvgLFQIntensity, x=fkpm)) + geom_hex() + scale_x_log10() + scale_y_log10() + facet_wrap(.~time) + theme_classic() + geom_smooth(method="lm", sd=NA, color="black") + scale_fill_gradient(low="#FFE5E5",high="red") + xlab("RNA seq FPKM / gene") + ylab("Proteome average FQ Intensity per gene") -> plotallcors
+
+ggsave(plotallcors, filename="plotallcors.pdf", width=10,height=10)
+```
