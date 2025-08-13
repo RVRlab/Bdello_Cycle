@@ -1,0 +1,115 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+
+library(bactMAP)
+library(tidyverse)
+
+```
+
+
+```{r}
+addPixels2um("Snape", 0.0659409)
+Cm_GFP <- extr_Oufti("CM_230_GFP.csv", mag = "Snape")
+Cm_DAPI <- extr_Oufti("CM_230_DAPI_method3.csv", mag= "Snape")
+
+Rif_GFP <- extr_Oufti("230_rif_GFP.csv", mag="Snape")
+Rif_DAPI <- extr_Oufti("230_rif_DAPI_method3.csv", mag="Snape")
+
+Ct_GFP <- extr_Oufti("230_control_GFP.csv", mag="Snape")
+Ct_DAPI <- extr_Oufti("230_control_DAPI_method3.csv", mag="Snape")
+
+```
+
+```{r}
+
+all_meshes <- combineDataframes(list(Cm_GFP$mesh, Cm_DAPI$mesh, Rif_GFP$mesh, Rif_DAPI$mesh, Ct_GFP$mesh, Ct_DAPI$mesh), listofchannels = list("GFP", "DAPI", "GFP", "DAPI", "GFP", "DAPI"), listofconditions = list("Cm", "Cm", "Rif", "Rif", "Control", "Control"))$finalframe
+
+all_objects <- combineDataframes(list(Cm_GFP$object_relative, Cm_DAPI$object_relative, Rif_GFP$object_relative, Rif_DAPI$object_relative, Ct_GFP$object_relative, Ct_DAPI$object_relative), listofchannels = list("GFP", "DAPI", "GFP", "DAPI", "GFP", "DAPI"), listofconditions = list("Cm", "Cm", "Rif", "Rif", "Control", "Control"))$finalframe
+
+all_objects <- all_objects |> left_join(all_meshes |> select(frame, cell, condition, channel, area) |> distinct()) |> mutate(area_um = area*0.0659409*0.0659409)
+
+
+```
+
+
+```{r}
+
+all_objects <- all_objects |> mutate(condition = as.factor(condition), condition=fct_relevel(condition, "Control", "Cm", "Rif"))
+
+ggplot(all_objects |> filter(channel=="DAPI"), aes(x="x", y=obarea_um/area_um)) + geom_violin(fill="black") + facet_grid(condition~.) + theme_minimal() + ylim(0,1) -> sinaplot_GFP
+
+ggsave(sinaplot_GFP, file="sinaplot_GFP_DAPI_method3.pdf", width=4, height=8)
+ggplot(all_objects, aes(x=condition, y=area_um)) + geom_violin() + facet_wrap(.~channel)
+ggplot(all_objects, aes(x=condition, y=obarea_um)) + geom_violin() + facet_wrap(.~channel)
+
+ggplot(all_objects, aes(x=oblength, y=obwidth)) + geom_point() + facet_wrap(channel~condition)
+
+save(all_objects, file="objects_GL1027.Rda")
+save(all_meshes, file = "meshes, GL1027.Rda")
+```
+
+
+```{r}
+
+ggplot(all_objects, aes(x=condition, y=obarea_um/area_um)) + geom_violin() + facet_wrap(.~channel)
+ggplot(all_objects, aes(x=condition, y=area_um)) + geom_violin() + facet_wrap(.~channel)
+ggplot(all_objects, aes(x=condition, y=obarea_um)) + geom_violin() + facet_wrap(.~channel)
+
+ggplot(all_objects, aes(x=oblength, y=obwidth)) + geom_point() + facet_wrap(channel~condition)
+
+save(all_objects, file="objects_GL1026.Rda")
+save(all_meshes, file = "meshes, GL1026.Rda")
+```
+
+
+```{r}
+
+control_GFP <- extr_OriginalStack("GFP/control_rfp_denoised.tif")
+cm_GFP <- extr_OriginalStack("GFP/GFP_CM_230_denoised.tif")
+rif_GFP <- extr_OriginalStack("GFP/GFP_rif_230_denoised.tif")
+
+GFP_cells_control <- extr_OriginalCells(control_GFP, Ct_GFP$mesh)
+GFP_cells_cm <- extr_OriginalCells(cm_GFP, Cm_GFP$mesh)
+GFP_cells_rif <- extr_OriginalCells(rif_GFP, Rif_GFP$mesh)
+```
+
+
+```{r}
+
+GFP_all <- combineDataframes(list(GFP_cells_cm$rawdata_turned, GFP_cells_control$rawdata_turned, GFP_cells_rif$rawdata_turned), listofconditions = list("cm", "control", "rif"))
+
+GFP_all <- GFP_all$finalframe
+
+GFP_all <- GFP_all |> 
+  ungroup() |>
+  group_by(X_rot, Y_rot,condition) |> mutate(X_rot = round(X_rot*2)/2, Y_rot=round(Y_rot*2)/2) |> summarize(meanval = mean(values), medval=median(values), sdval=sd(values), sumval=sum(values), npix = n_distinct(values)) |> ungroup() |>
+  group_by(condition) |> mutate(maxnpix=max(npix))
+
+
+ggplot() +
+  geom_tile(data= GFP_all |> filter(condition == "control", (npix*4)>maxnpix), aes(x=X_rot, y=Y_rot, fill=medval, alpha=npix)) +
+  scale_fill_gradient2(high="white", mid="#bfff00", low="black", midpoint=3300) + 
+  coord_fixed() + 
+  theme(panel.background=element_rect(fill="black"), panel.grid=element_blank()) + 
+  geom_path(data=all_meshes |> filter(channel=="GFP", condition=="Control", frame==1, cell<200), aes(x=X_rot, y=Y_rot, group=paste(cell, frame)), color="white", alpha=0.02) +xlim(-10,10) + ylim(-5,5) -> controlGFPplot
+
+ggsave(controlGFPplot, filename="controlGFPplot.pdf")
+
+ggplot() +
+  geom_tile(data=GFP_all |> filter(condition == "cm", (npix*4)>maxnpix), aes(x=X_rot, y=Y_rot, fill=medval, alpha=npix)) + scale_fill_gradient2(high="white", mid="#bfff00", low="black", midpoint=2800) + coord_fixed() + theme(panel.background=element_rect(fill="black"), panel.grid=element_blank()) +
+ geom_path(data=all_meshes |> filter(channel=="GFP", condition=="Cm", frame==1, cell<200), aes(x=X_rot, y=Y_rot, group=paste(cell, frame)), color="white", alpha=0.02) +xlim(-10,10) + ylim(-5,5) -> cmGFPplot
+ggsave(cmGFPplot, filename="cmGFPplot.pdf")
+
+ggplot() +
+  geom_tile(data=GFP_all |> filter(condition == "rif", (npix*4)>maxnpix), aes(x=X_rot, y=Y_rot, fill=medval, alpha=npix)) + scale_fill_gradient2(high="white", mid="#bfff00", low="black", midpoint=3300) + coord_fixed() + theme(panel.background=element_rect(fill="black"), panel.grid=element_blank()) +
+  geom_path(data=all_meshes |> filter(channel=="GFP", condition=="Rif", frame==1, cell<200), aes(x=X_rot, y=Y_rot, group=paste(cell, frame)), color="white", alpha=0.02) +xlim(-10,10) + ylim(-5,5) -> rifGFPplot
+
+ggsave(rifGFPplot, filename="rifGFPplot.pdf")
+
+
+```
